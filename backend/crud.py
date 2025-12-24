@@ -3,6 +3,12 @@ from typing import List, Optional
 import models
 from pydantic import BaseModel
 
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # CRUD = Create, Read, Update, Delete
 # These functions handle all database operations
 
@@ -50,35 +56,38 @@ def get_videos(
 
 def create_video(db: Session, title: str, duration: int, file_size_mb: Optional[int] = None) -> models.Video:
     """
-    Create new video in database
-    
-    Args:
-        db: Database session
-        title: Video title
-        duration: Duration in seconds
-        file_size_mb: File size in MB (optional)
-        
-    Returns:
-        Created Video object
+    Create new video with error handling
     """
-    # Create new Video instance
-    db_video = models.Video(
-        title=title,
-        duration=duration,
-        file_size_mb=file_size_mb,
-        status="processing"  # Default status
-    )
-    
-    # Add to session (prepares for save)
-    db.add(db_video)
-    
-    # Commit to database (actually saves)
-    db.commit()
-    
-    # Refresh to get database-generated fields (id, created_at, etc.)
-    db.refresh(db_video)
-    
-    return db_video
+    try:
+        # Validate inputs
+        if duration <= 0:
+            raise ValueError("Duration must be positive")
+        
+        if len(title.strip()) == 0:
+            raise ValueError("Title cannot be empty")
+        
+        # Create video
+        db_video = models.Video(
+            title=title.strip(),  # Remove whitespace
+            duration=duration,
+            file_size_mb=file_size_mb,
+            status="processing"
+        )
+        
+        db.add(db_video)
+        db.commit()
+        db.refresh(db_video)
+        
+        logger.info(f"Created video: {db_video.id} - {db_video.title}")
+        return db_video
+        
+    except SQLAlchemyError as e:
+        logger.error(f"Database error creating video: {e}")
+        db.rollback()
+        raise
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        raise
 
 
 def update_video_status(db: Session, video_id: int, status: str) -> Optional[models.Video]:
