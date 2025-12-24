@@ -30,19 +30,22 @@ StreamScribe transforms video content into searchable, analyzable text using AI:
 
 ## Current Features
 
- RESTful API with automatic documentation  
- Video metadata management  
- Platform analytics  
- Health monitoring  
- Production deployment  
+RESTful API with automatic documentation  
+**PostgreSQL database integration**  
+**SQLAlchemy ORM with models**  
+**CRUD operations for videos**  
+**Database migrations support**  
+**Environment-based configuration**  
+Platform analytics from real data  
+Health monitoring with database check  
+Production deployment with database  
 
 ### Coming Soon
- Video upload & storage
- AI transcription (Whisper)
- Semantic search (RAG)
- AI summarization
- User authentication
- Frontend UI
+File upload & storage (Supabase Storage)
+AI transcription (Whisper)
+Semantic search (RAG)
+User authentication
+Frontend UI
 
 
 
