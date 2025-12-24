@@ -7,11 +7,22 @@ __pycache__/
 env/
 venv/
 *.egg-info/
+__pycache__/
+*.pyc
 
 # Environment
 .env
 .env.local
 CREDENTIALS.txt
+.env
+.env.local
+*.env
+
+# Database
+*.db
+*.sqlite
+create_tables.py
+
 
 # IDEs
 .vscode/
