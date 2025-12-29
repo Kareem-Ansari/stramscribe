@@ -8,5 +8,5 @@ python-dotenv
 alembic
 supabase
 aiofiles
-python-magic-bin
+python-magic
 pillow

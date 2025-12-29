@@ -2,7 +2,11 @@ from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
 from typing import Optional
-import magic
+try:
+    import magic
+except ImportError:
+    magic = None
+
 import logging
 
 load_dotenv()
@@ -21,19 +25,18 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def get_file_type(file_data: bytes) -> str:
     """
     Detect file type from binary data using magic numbers
-    
-    Args:
-        file_data: First few bytes of file
-        
-    Returns:
-        MIME type (e.g., 'video/mp4')
     """
     try:
+        if magic is None:
+            logger.warning("python-magic not available, using default type")
+            return "application/octet-stream"
+        
+        # Try the method that works on both Mac and Linux
         mime = magic.Magic(mime=True)
         return mime.from_buffer(file_data)
     except Exception as e:
         logger.error(f"Error detecting file type: {e}")
-        return "application/octet-stream"  # Default binary type
+        return "application/octet-stream"
 
 
 def is_video_file(mime_type: str) -> bool:
