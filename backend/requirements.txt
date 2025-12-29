@@ -1,22 +1,12 @@
-fastapi
-uvicorn
-python-multipart
-pydantic
-sqlalchemy
-psycopg2-binary
-python-dotenv
-alembicaiofiles @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_0ar7qj9rcj/croot/aiofiles_1683773588297/work
-Pillow @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_124pvldps5/croot/pillow_1695134106500/work
+fastapi==0.115.0
+uvicorn==0.32.1
+python-multipart==0.0.12
+pydantic==2.10.3
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+python-dotenv==1.0.1
+alembic==1.14.0
+supabase==2.11.2
+aiofiles==24.1.0
 python-magic-bin==0.4.14
-supabase==2.27.0
-supabase-auth==2.27.0
-supabase-functions==2.27.0
-
-
-
-
-
-
-
-
-
+pillow==11.0.0
