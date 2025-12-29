@@ -12,15 +12,19 @@ class Video(Base):
     # Columns
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False, index=True)
-    duration = Column(Integer, nullable=False)  # in seconds
+    duration = Column(Integer, nullable=True)  # Changed to nullable - we'll calculate it
     file_size_mb = Column(Integer, nullable=True)
-    status = Column(
-        String(50), 
-        nullable=False, 
-        default="processing",
-        index=True  # Index for faster queries by status
-    )
-    storage_url = Column(Text, nullable=True)
+    status = Column(String(50), nullable=False, default="uploading", index=True)
+    
+    # NEW FIELDS for file storage
+    storage_path = Column(Text, nullable=True)  # Path in Supabase Storage
+    storage_url = Column(Text, nullable=True)   # Public/signed URL
+    original_filename = Column(String(255), nullable=True)  # User's original filename
+    mime_type = Column(String(100), nullable=True)  # video/mp4, etc.
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
     
     # Timestamps - automatically managed
     created_at = Column(

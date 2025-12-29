@@ -1,13 +1,20 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+import os
 
-# Import our new modules
 from database import get_db, engine
 import models
 import crud
+from storage import upload_to_storage, is_video_file, get_file_type
+from file_utils import (
+    generate_unique_filename, 
+    sanitize_filename,
+    validate_file_size,
+    format_file_size
+)
 
 # Create database tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -164,3 +171,183 @@ def get_stats(db: Session = Depends(get_db)):
         "status_breakdown": status_counts,
         "database": "PostgreSQL"
     }
+    
+    
+@app.post("/api/videos/upload", status_code=201)
+async def upload_video(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload video file to storage and create database record
+    
+    - **file**: Video file to upload
+    - **title**: Optional custom title (uses filename if not provided)
+    """
+    try:
+        # Validate file is present
+        if not file:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
+        # Sanitize original filename
+        original_filename = sanitize_filename(file.filename)
+        
+        # Use provided title or default to filename
+        video_title = title if title else os.path.splitext(original_filename)[0]
+        
+        # Read file data
+        file_data = await file.read()
+        file_size_bytes = len(file_data)
+        validate_upload_request(original_filename, video_title, file_size_bytes)
+        file_size_mb = file_size_bytes / (1024 * 1024)
+        from validators import validate_upload_request
+
+        
+        # Validate file size
+        is_valid, error_msg = validate_file_size(file_size_bytes)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Detect file type
+        mime_type = get_file_type(file_data[:2048])
+        
+        # Validate it's a video file
+        if not is_video_file(mime_type):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type: {mime_type}. Only video files allowed."
+            )
+        
+        # Generate unique filename
+        unique_filename = generate_unique_filename(original_filename)
+        
+        # Upload to Supabase Storage
+        upload_result = await upload_to_storage(
+            file_data=file_data,
+            filename=unique_filename,
+            folder="uploads"
+        )
+        
+        if not upload_result["success"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to upload file: {upload_result.get('error')}"
+            )
+        
+        # Create database record
+        db_video = models.Video(
+            title=video_title,
+            duration=None,  # Will extract later with ffmpeg
+            file_size_mb=int(file_size_mb),
+            status="processing",
+            storage_path=upload_result["storage_path"],
+            storage_url=upload_result["file_url"],
+            original_filename=original_filename,
+            mime_type=mime_type
+        )
+        
+        db.add(db_video)
+        db.commit()
+        db.refresh(db_video)
+        
+        return {
+            "message": "File uploaded successfully",
+            "video": {
+                "id": db_video.id,
+                "title": db_video.title,
+                "filename": original_filename,
+                "size": format_file_size(file_size_bytes),
+                "size_mb": int(file_size_mb),
+                "mime_type": mime_type,
+                "status": db_video.status,
+                "storage_url": db_video.storage_url
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    
+from fastapi.responses import StreamingResponse
+import io
+
+@app.get("/api/videos/{video_id}/download")
+async def download_video(video_id: int, db: Session = Depends(get_db)):
+    """
+    Download video file
+    Generates signed URL for secure download
+    """
+    # Get video from database
+    video = crud.get_video(db, video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    if not video.storage_path:
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Generate signed URL (valid for 1 hour)
+    from storage import get_signed_url
+    
+    signed_url = get_signed_url(video.storage_path, expires_in=3600)
+    
+    if not signed_url:
+        raise HTTPException(status_code=500, detail="Failed to generate download URL")
+    
+    return {
+        "download_url": signed_url,
+        "filename": video.original_filename,
+        "expires_in": 3600,
+        "note": "URL expires in 1 hour"
+    }
+
+
+@app.get("/api/videos/{video_id}/stream")
+async def stream_video(video_id: int, db: Session = Depends(get_db)):
+    """
+    Stream video for playback
+    Returns signed URL for streaming
+    """
+    video = crud.get_video(db, video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    if not video.storage_path:
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    # Generate signed URL (valid for 4 hours for streaming)
+    from storage import get_signed_url
+    
+    stream_url = get_signed_url(video.storage_path, expires_in=14400)
+    
+    return {
+        "stream_url": stream_url,
+        "mime_type": video.mime_type,
+        "title": video.title
+    }
+    
+app = FastAPI(
+    title="StreamScribe API",
+    description="""
+    AI-powered video transcription platform with cloud storage.
+    
+    ## Features
+    * Upload video files to cloud storage
+    * Automatic metadata extraction
+    * Secure file access with signed URLs
+    * Real-time transcription (coming soon)
+    * Semantic search (coming soon)
+    
+    ## File Upload
+    * Supported formats: MP4, MOV, AVI, MKV, WebM
+    * Maximum file size: 100MB
+    * Automatic video metadata extraction
+    """,
+    version="3.0.0",
+    contact={
+        "name": "Your Name",
+        "email": "your.email@example.com"
+    }
+)
