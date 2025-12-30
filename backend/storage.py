@@ -2,13 +2,14 @@ from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
 from typing import Optional
-try:
-    import magic
-except ImportError:
-    magic = None
-
 import logging
 
+# DEBUG: Print environment variables (REMOVE IN PRODUCTION)
+print(f"DEBUG - SUPABASE_URL: {SUPABASE_URL}")
+print(f"DEBUG - SUPABASE_KEY: {'SET' if SUPABASE_KEY else 'NOT SET'}")
+print(f"DEBUG - SUPABASE_BUCKET: {SUPABASE_BUCKET}")
+
+# Load environment variables (works locally, not on Render)
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -18,42 +19,44 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "videos")
 
-# Create Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Only create client if credentials are available
+supabase: Optional[Client] = None
+
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logger.info("Supabase client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Supabase client: {e}")
+        supabase = None
+else:
+    logger.warning("Supabase credentials not found. File upload will not work.")
 
 
 def get_file_type(file_data: bytes) -> str:
-    """
-    Detect file type from binary data using magic numbers
-    """
+    """Detect file type from binary data"""
     try:
-        if magic is None:
-            logger.warning("python-magic not available, using default type")
-            return "application/octet-stream"
-        
-        # Try the method that works on both Mac and Linux
-        mime = magic.Magic(mime=True)
-        return mime.from_buffer(file_data)
+        # Simple detection without python-magic dependency
+        if file_data[:4] == b'\x00\x00\x00\x18' or file_data[:4] == b'\x00\x00\x00\x1c':
+            return "video/mp4"
+        elif file_data[:4] == b'RIFF':
+            return "video/avi"
+        elif file_data[:8] == b'\x00\x00\x00\x14ftypqt':
+            return "video/quicktime"
+        else:
+            return "video/mp4"  # Default to mp4
     except Exception as e:
         logger.error(f"Error detecting file type: {e}")
-        return "application/octet-stream"
+        return "video/mp4"
 
 
 def is_video_file(mime_type: str) -> bool:
-    """
-    Check if MIME type is a video
-    
-    Args:
-        mime_type: MIME type string
-        
-    Returns:
-        True if video, False otherwise
-    """
+    """Check if MIME type is a video"""
     allowed_types = [
         'video/mp4',
-        'video/quicktime',  # .mov
-        'video/x-msvideo',  # .avi
-        'video/x-matroska', # .mkv
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/x-matroska',
         'video/webm'
     ]
     return mime_type in allowed_types
@@ -64,6 +67,16 @@ async def upload_to_storage(
     filename: str,
     folder: str = "uploads"
 ) -> dict:
+    """Upload file to Supabase Storage"""
+    
+    # Check if Supabase client is available
+    if not supabase:
+        logger.error("Supabase client not initialized")
+        return {
+            "success": False,
+            "error": "Storage service not configured"
+        }
+    
     try:
         storage_path = f"{folder}/{filename}"
         mime_type = get_file_type(file_data[:2048])
@@ -74,11 +87,11 @@ async def upload_to_storage(
             file=file_data,
             file_options={
                 "content-type": mime_type,
-                "upsert": "true"  # ADD THIS - allows overwriting
+                "upsert": "true"
             }
         )
         
-        # Get public URL (works because bucket is public now)
+        # Get public URL
         public_url = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(storage_path)
         
         logger.info(f"File uploaded successfully: {storage_path}")
@@ -86,7 +99,7 @@ async def upload_to_storage(
         return {
             "success": True,
             "storage_path": storage_path,
-            "file_url": public_url,  # Changed from constructed URL
+            "file_url": public_url,
             "mime_type": mime_type
         }
         
@@ -99,15 +112,10 @@ async def upload_to_storage(
 
 
 async def delete_from_storage(storage_path: str) -> bool:
-    """
-    Delete file from Supabase Storage
+    """Delete file from Supabase Storage"""
+    if not supabase:
+        return False
     
-    Args:
-        storage_path: Path in storage bucket
-        
-    Returns:
-        True if successful, False otherwise
-    """
     try:
         supabase.storage.from_(SUPABASE_BUCKET).remove([storage_path])
         logger.info(f"File deleted: {storage_path}")
@@ -118,16 +126,10 @@ async def delete_from_storage(storage_path: str) -> bool:
 
 
 def get_signed_url(storage_path: str, expires_in: int = 3600) -> Optional[str]:
-    """
-    Generate signed URL for private file access
+    """Generate signed URL for private file access"""
+    if not supabase:
+        return None
     
-    Args:
-        storage_path: Path in storage bucket
-        expires_in: URL validity in seconds (default 1 hour)
-        
-    Returns:
-        Signed URL or None if error
-    """
     try:
         response = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
             path=storage_path,
@@ -137,6 +139,3 @@ def get_signed_url(storage_path: str, expires_in: int = 3600) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error creating signed URL: {e}")
         return None
-    
-    
-    
