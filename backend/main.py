@@ -298,21 +298,10 @@ async def upload_video(
 
 @app.delete("/api/videos/{video_id}")
 def delete_video(video_id: int, db: Session = Depends(get_db)):
-    """Delete video from database and storage"""
-    # Get video first
+    """Delete video from database"""
     video = crud.get_video(db, video_id)
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-    
-    # Try to delete from storage
-    if STORAGE_AVAILABLE and video.storage_path:
-        try:
-            from storage import delete_from_storage
-            deleted = await delete_from_storage(video.storage_path)
-            if deleted:
-                logger.info(f"Deleted file from storage: {video.storage_path}")
-        except Exception as e:
-            logger.warning(f"Failed to delete from storage: {e}")
     
     # Delete from database
     success = crud.delete_video(db, video_id)
@@ -323,7 +312,7 @@ def delete_video(video_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/videos/{video_id}/download")
-async def download_video(video_id: int, db: Session = Depends(get_db)):
+def download_video(video_id: int, db: Session = Depends(get_db)):
     """
     Get download URL for video
     Returns a signed URL valid for 1 hour
@@ -353,7 +342,7 @@ async def download_video(video_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/videos/{video_id}/stream")
-async def stream_video(video_id: int, db: Session = Depends(get_db)):
+def stream_video(video_id: int, db: Session = Depends(get_db)):
     """
     Get streaming URL for video
     Returns a signed URL valid for 4 hours
@@ -400,17 +389,6 @@ def get_stats(db: Session = Depends(get_db)):
         "database": "PostgreSQL",
         "storage_configured": STORAGE_AVAILABLE
     }
-
-
-# Error handlers
-@app.exception_handler(404)
-async def not_found_handler(request, exc):
-    return {"detail": "Not Found"}
-
-
-@app.exception_handler(500)
-async def internal_error_handler(request, exc):
-    return {"detail": "Internal Server Error"}
 
 
 if __name__ == "__main__":
