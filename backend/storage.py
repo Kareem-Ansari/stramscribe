@@ -4,6 +4,38 @@ from dotenv import load_dotenv
 from typing import Optional
 import logging
 
+from supabase import create_client, Client
+import os
+from dotenv import load_dotenv
+from typing import Optional
+import logging
+import sys
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# FORCE print to stdout (Render will show this)
+print("=" * 50, file=sys.stderr)
+print("STORAGE.PY LOADING", file=sys.stderr)
+print("=" * 50, file=sys.stderr)
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "videos")
+
+print(f"SUPABASE_URL: {SUPABASE_URL}", file=sys.stderr)
+print(f"SUPABASE_KEY: {'[SET]' if SUPABASE_KEY else '[NOT SET]'}", file=sys.stderr)
+print(f"SUPABASE_BUCKET: {SUPABASE_BUCKET}", file=sys.stderr)
+print("=" * 50, file=sys.stderr)
+
+# Rest of your storage.py code...
+
+
+
 # DEBUG: Print environment variables (REMOVE IN PRODUCTION)
 print(f"DEBUG - SUPABASE_URL: {SUPABASE_URL}")
 print(f"DEBUG - SUPABASE_KEY: {'SET' if SUPABASE_KEY else 'NOT SET'}")
